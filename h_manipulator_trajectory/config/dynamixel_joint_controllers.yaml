@@ -4,12 +4,12 @@ right_controller:
         module: joint_position_controller
         type: JointPositionController
     joint_name: right_joint
-    joint_speed: 2.0
+    joint_speed: 10.0
     motor:
-        id: 5
-        init: 512
+        id: 1
+        init: 2048
         min: 0
-        max: 4096
+        max: 4095
 
 left_controller:
     controller:
@@ -17,9 +17,9 @@ left_controller:
         module: joint_position_controller
         type: JointPositionController
     joint_name: left_joint
-    joint_speed: 2.0
+    joint_speed: 10.0
     motor:
-        id: 6
-        init: 512
+        id: 2
+        init: 2048
         min: 0
-        max: 4096
+        max: 4095

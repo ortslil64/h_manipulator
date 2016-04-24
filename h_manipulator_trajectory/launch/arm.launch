@@ -1,11 +1,11 @@
 <launch>
- <!-- Load dynamixel pro arms drivers -->
+ <!-- Load dynamixel pro arms drivers  -->
         <param name="robot_description" textfile="$(find h_arm_urdfV3)/robots/h_arm_urdf.URDF" />
 	<node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
  	<node pkg="dynamixel_pro_controller" type="dynamixel_pro_controller_node" name="hope_this_work" >
            <rosparam command="load" file="$(find dynamixel_pro_controller)/config/motors_config.yaml"/>
         </node>
-        
+       
         
         
          <!-- Load dynamixel gripper drivers -->
@@ -14,7 +14,7 @@
             namespace: dxl_manager
             serial_ports:
                 pan_tilt_port:
-                    port_name: "/dev/ttyUSB0"
+                    port_name: "/dev/ttyUSB1"
                     baud_rate: 1000000
                     min_motor_id: 1
                     max_motor_id: 25
