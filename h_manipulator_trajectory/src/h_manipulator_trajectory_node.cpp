@@ -14,19 +14,13 @@
 
 
 
-ros::Publisher j0_pub_;
-ros::Publisher j1_pub_;
-ros::Publisher j2_pub_;
-ros::Publisher j3_pub_;
-ros::Publisher j4_pub_;
-ros::Publisher j5_pub_;
-ros::Publisher j6_pub_;
+ros::Publisher joint_state_pub;
 
 
 
 
-double j0_pos_public,j1_pos_public,j2_pos_public,j3_pos_public,j4_pos_public,j5_pos_public,j6_pos_public;
-double j0_vel_public,j1_vel_public,j2_vel_public,j3_vel_public,j4_vel_public,j5_vel_public,j6_vel_public;
+
+
 typedef struct Task {
 	float x;
 	float z;
@@ -37,29 +31,42 @@ typedef struct Task {
 };
 /////// avishai's code//////
 // Links lengths
-const float L1 = 420e-3; //Second and third links
-const float L2 = 400e-3; //Fourth and fifth links
-const float L3 = 235.9e-3; //Sixth link and gripper
-Task DirectKinematics3R(float q[3], float dq[3]) {
-	//Direct kinematics function
-	Task G;
-
-	G.x = L1*sin(q[0]) + L2*sin(q[0]+q[1]) + L3*sin(q[0]+q[1]+q[2]);
-	G.z = L1*cos(q[0]) + L2*cos(q[0]+q[1]) + L3*cos(q[0]+q[1]+q[2]);
-	G.psi = q[0]+q[1]+q[2]; // pitch is relative to the vertical axis z
-
-	G.dx = L1*cos(q[0])*dq[0] + L2*cos(q[0]+q[1])*(dq[0]+dq[1]) + L3*cos(q[0]+q[1]+q[2])*(dq[0]+dq[1]+dq[2]);
-	G.dz = L1*sin(q[0])*dq[0] + L2*sin(q[0]+q[1])*(dq[0]+dq[1]) + L3*sin(q[0]+q[1]+q[2])*(dq[0]+dq[1]+dq[2]);
-	G.dpsi = dq[0]+dq[1]+dq[2]; 
-
-	return G;
-}
+const float L1 = 0.264; //420e-3; //Second and third links
+const float L2 = 0.258; //400e-3; //Fourth and fifth links
+const float L3 = 0.3; //?????235.9e-3; //Sixth link and gripper
 
 void InverseKinematics3R(Task G, float* q, float* dq) {
 	//Inverse kinematics function
 	float xt, zt, gamma, R;
-
-	xt = G.x - L3*sin(G.psi);
+	float L1n, L2n, b = 0, cosb2, sinb2;
+	int i, sigma;
+	const float a = 0.03;
+	
+	// Position
+	for (i=1; i<=4; i++) {
+		L1n = L1 + b;
+		L2n = L2 + b;
+		
+		xt = G.x + L3*sin(G.psi);
+		zt = G.z - L3*cos(G.psi);
+		R = sqrt(xt*xt + zt*zt);
+		sigma = -1;
+		gamma = atan2(zt, -xt);
+		q[0] = PI/2 - gamma + sigma*acos((R*R+L1n*L1n-L2n*L2n)/(2*L1n*R));
+		cosb2 = (-R*R + L1n*L1n + L2n*L2n)/(2*L1n*L2n);
+		sinb2 = sqrt(1 - cosb2*cosb2);
+		q[1] = PI - PI/4 - atan2(sinb2, cosb2);
+		
+		b = a / tan(PI/2 - (q[1] + PI/4)/2);		
+	}
+	
+	q[2] = G.psi - (q[0] + q[1] + PI/4);
+	
+	// Velocity
+	dq[0] = (G.dx*(L2*cos(q[0] + q[1]) + L2*sin(q[0] + q[1]) - a*cos(q[0] + q[1]) + a*sin(q[0] + q[1])))/(a*a*cos(q[0] + q[1])*cos(q[0]) - a*a*cos(q[0] + q[1])*sin(q[0]) + a*a*sin(q[0] + q[1])*cos(q[0]) + a*a*sin(q[0] + q[1])*sin(q[0]) - L1*L2*cos(q[0] + q[1])*cos(q[0]) + L1*L2*cos(q[0] + q[1])*sin(q[0]) - L1*L2*sin(q[0] + q[1])*cos(q[0]) + L1*a*cos(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*cos(q[0]) - L1*L2*sin(q[0] + q[1])*sin(q[0]) + L1*a*cos(q[0] + q[1])*sin(q[0]) - L1*a*sin(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*sin(q[0]) - L2*a*sin(q[0] + q[1])*cos(q[0]) + L1*a*sin(q[0] + q[1])*sin(q[0]) + L2*a*sin(q[0] + q[1])*sin(q[0])) - (G.dz*(L2*cos(q[0] + q[1]) - L2*sin(q[0] + q[1]) + a*cos(q[0] + q[1]) + a*sin(q[0] + q[1])))/(a*a*cos(q[0] + q[1])*cos(q[0]) - a*a*cos(q[0] + q[1])*sin(q[0]) + a*a*sin(q[0] + q[1])*cos(q[0]) + a*a*sin(q[0] + q[1])*sin(q[0]) - L1*L2*cos(q[0] + q[1])*cos(q[0]) + L1*L2*cos(q[0] + q[1])*sin(q[0]) - L1*L2*sin(q[0] + q[1])*cos(q[0]) + L1*a*cos(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*cos(q[0]) - L1*L2*sin(q[0] + q[1])*sin(q[0]) + L1*a*cos(q[0] + q[1])*sin(q[0]) - L1*a*sin(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*sin(q[0]) - L2*a*sin(q[0] + q[1])*cos(q[0]) + L1*a*sin(q[0] + q[1])*sin(q[0]) + L2*a*sin(q[0] + q[1])*sin(q[0])) - (G.dpsi*(sqrt(2)*L2*L3*sin(q[0] + q[1] + q[2])*cos(q[0] + q[1]) - sqrt(2)*L2*L3*cos(q[0] + q[1] + q[2])*sin(q[0] + q[1]) + sqrt(2)*L3*a*cos(q[0] + q[1] + q[2])*cos(q[0] + q[1]) + sqrt(2)*L3*a*sin(q[0] + q[1] + q[2])*sin(q[0] + q[1])))/(a*a*cos(q[0] + q[1])*cos(q[0]) - a*a*cos(q[0] + q[1])*sin(q[0]) + a*a*sin(q[0] + q[1])*cos(q[0]) + a*a*sin(q[0] + q[1])*sin(q[0]) - L1*L2*cos(q[0] + q[1])*cos(q[0]) + L1*L2*cos(q[0] + q[1])*sin(q[0]) - L1*L2*sin(q[0] + q[1])*cos(q[0]) + L1*a*cos(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*cos(q[0]) - L1*L2*sin(q[0] + q[1])*sin(q[0]) + L1*a*cos(q[0] + q[1])*sin(q[0]) - L1*a*sin(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*sin(q[0]) - L2*a*sin(q[0] + q[1])*cos(q[0]) + L1*a*sin(q[0] + q[1])*sin(q[0]) + L2*a*sin(q[0] + q[1])*sin(q[0]));
+	dq[1] = (G.dz*(2*L1*cos(q[0]) - 2*a*sin(q[0]) + sqrt(2)*L2*cos(q[0] + q[1]) - sqrt(2)*L2*sin(q[0] + q[1]) + sqrt(2)*a*cos(q[0] + q[1]) + sqrt(2)*a*sin(q[0] + q[1])))/(sqrt(2)*a*a*sin(q[0] + q[1])*cos(q[0]) - sqrt(2)*a*a*cos(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L2*a*sin(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*L2*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*cos(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*a*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L2*a*sin(q[0] + q[1])*cos(q[0])) - (G.dx*(2*L1*sin(q[0]) + 2*a*cos(q[0]) + sqrt(2)*L2*cos(q[0] + q[1]) + sqrt(2)*L2*sin(q[0] + q[1]) - sqrt(2)*a*cos(q[0] + q[1]) + sqrt(2)*a*sin(q[0] + q[1])))/(sqrt(2)*a*a*sin(q[0] + q[1])*cos(q[0]) - sqrt(2)*a*a*cos(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L2*a*sin(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*L2*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*cos(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*a*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L2*a*sin(q[0] + q[1])*cos(q[0])) + (G.dpsi*(L1*L3*sin(q[0] + q[1] + q[2])*sin(q[0]) - L3*a*cos(q[0] + q[1] + q[2])*sin(q[0]) + L3*a*sin(q[0] + q[1] + q[2])*cos(q[0]) - L3*a*sin(q[0] + q[1] + q[2])*sin(q[0]) + L1*L3*cos(q[0] + q[1] + q[2])*cos(q[0]) - L1*L3*cos(q[0] + q[1] + q[2])*sin(q[0]) + L1*L3*sin(q[0] + q[1] + q[2])*cos(q[0]) - L3*a*cos(q[0] + q[1] + q[2])*cos(q[0]) - sqrt(2)*L2*L3*cos(q[0] + q[1] + q[2])*sin(q[0] + q[1]) + sqrt(2)*L2*L3*sin(q[0] + q[1] + q[2])*cos(q[0] + q[1]) + sqrt(2)*L3*a*cos(q[0] + q[1] + q[2])*cos(q[0] + q[1]) + sqrt(2)*L3*a*sin(q[0] + q[1] + q[2])*sin(q[0] + q[1])))/(a*a*cos(q[0] + q[1])*cos(q[0]) - a*a*cos(q[0] + q[1])*sin(q[0]) + a*a*sin(q[0] + q[1])*cos(q[0]) + a*a*sin(q[0] + q[1])*sin(q[0]) - L1*L2*cos(q[0] + q[1])*cos(q[0]) + L1*L2*cos(q[0] + q[1])*sin(q[0]) - L1*L2*sin(q[0] + q[1])*cos(q[0]) + L1*a*cos(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*cos(q[0]) - L1*L2*sin(q[0] + q[1])*sin(q[0]) + L1*a*cos(q[0] + q[1])*sin(q[0]) - L1*a*sin(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*sin(q[0]) - L2*a*sin(q[0] + q[1])*cos(q[0]) + L1*a*sin(q[0] + q[1])*sin(q[0]) + L2*a*sin(q[0] + q[1])*sin(q[0]));
+	dq[2] = (G.dx*(2*L1*sin(q[0]) + 2*a*cos(q[0])))/(sqrt(2)*a*a*sin(q[0] + q[1])*cos(q[0]) - sqrt(2)*a*a*cos(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L2*a*sin(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*L2*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*cos(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*a*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L2*a*sin(q[0] + q[1])*cos(q[0])) - (G.dz*(2*L1*cos(q[0]) - 2*a*sin(q[0])))/(sqrt(2)*a*a*sin(q[0] + q[1])*cos(q[0]) - sqrt(2)*a*a*cos(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*a*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L2*a*sin(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*L2*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*cos(q[0]) - sqrt(2)*L1*L2*sin(q[0] + q[1])*sin(q[0]) + sqrt(2)*L1*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L1*a*sin(q[0] + q[1])*cos(q[0]) + sqrt(2)*L2*a*cos(q[0] + q[1])*sin(q[0]) - sqrt(2)*L2*a*sin(q[0] + q[1])*cos(q[0])) + (G.dpsi*(a*a*cos(q[0] + q[1])*cos(q[0]) - a*a*cos(q[0] + q[1])*sin(q[0]) + a*a*sin(q[0] + q[1])*cos(q[0]) + a*a*sin(q[0] + q[1])*sin(q[0]) - L1*L3*sin(q[0] + q[1] + q[2])*sin(q[0]) + L3*a*cos(q[0] + q[1] + q[2])*sin(q[0]) - L3*a*sin(q[0] + q[1] + q[2])*cos(q[0]) + L3*a*sin(q[0] + q[1] + q[2])*sin(q[0]) - L1*L2*cos(q[0] + q[1])*cos(q[0]) + L1*L2*cos(q[0] + q[1])*sin(q[0]) - L1*L2*sin(q[0] + q[1])*cos(q[0]) + L1*a*cos(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*cos(q[0]) - L1*L2*sin(q[0] + q[1])*sin(q[0]) + L1*a*cos(q[0] + q[1])*sin(q[0]) - L1*a*sin(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*sin(q[0]) - L2*a*sin(q[0] + q[1])*cos(q[0]) + L1*a*sin(q[0] + q[1])*sin(q[0]) + L2*a*sin(q[0] + q[1])*sin(q[0]) - L1*L3*cos(q[0] + q[1] + q[2])*cos(q[0]) + L1*L3*cos(q[0] + q[1] + q[2])*sin(q[0]) - L1*L3*sin(q[0] + q[1] + q[2])*cos(q[0]) + L3*a*cos(q[0] + q[1] + q[2])*cos(q[0])))/(a*a*cos(q[0] + q[1])*cos(q[0]) - a*a*cos(q[0] + q[1])*sin(q[0]) + a*a*sin(q[0] + q[1])*cos(q[0]) + a*a*sin(q[0] + q[1])*sin(q[0]) - L1*L2*cos(q[0] + q[1])*cos(q[0]) + L1*L2*cos(q[0] + q[1])*sin(q[0]) - L1*L2*sin(q[0] + q[1])*cos(q[0]) + L1*a*cos(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*cos(q[0]) - L1*L2*sin(q[0] + q[1])*sin(q[0]) + L1*a*cos(q[0] + q[1])*sin(q[0]) - L1*a*sin(q[0] + q[1])*cos(q[0]) + L2*a*cos(q[0] + q[1])*sin(q[0]) - L2*a*sin(q[0] + q[1])*cos(q[0]) + L1*a*sin(q[0] + q[1])*sin(q[0]) + L2*a*sin(q[0] + q[1])*sin(q[0]));
+	/*xt = G.x - L3*sin(G.psi);
 	zt = G.z - L3*cos(G.psi);
 	gamma = atan2(zt, xt);
 	R = sqrt(xt*xt + zt*zt);
@@ -71,6 +78,7 @@ void InverseKinematics3R(Task G, float* q, float* dq) {
 	dq[0] = (G.dx*sin(q[0] + q[1]) - G.dz*cos(q[0] + q[1]) + L3*G.dpsi*sin(q[2]))/(L1*sin(q[1]));
 	dq[1] = -(L2*G.dx*sin(q[0] + q[1]) - L2*G.dz*cos(q[0] + q[1]) - L1*G.dz*cos(q[0]) + L1*G.dx*sin(q[0]) + L1*L3*G.dpsi*sin(q[1] + q[2]) + L2*L3*G.dpsi*sin(q[2]))/(L1*L2*sin(q[1]));
 	dq[2] = (G.dx*sin(q[0]) - G.dz*cos(q[0]) + L3*G.dpsi*sin(q[1] + q[2]) + L2*G.dpsi*sin(q[1]))/(L2*sin(q[1]));
+	*/
 }
 
 float** TrajectoryGenerator(int N, float T, float xc, float z0, float vd) {
@@ -107,44 +115,61 @@ float** TrajectoryGenerator(int N, float T, float xc, float z0, float vd) {
 	return angles;
 }
 
-float VelocityCalc(float z) {
-	// z - desired height increase
-	// return the desired throw velocity
-	return sqrt(2*g*z);
-}
 
-///////end of avishai's code /////////
-void move_arm(double x,double z,double teta,double grip)
+
+
+void move_arm(double x,double z,double psi,double dx,double dz,double dpsi)
 {
 	float q_inv[3];
 	float dq_inv[3];
-	Task temp_position;
-	  temp_position.x=x;
-	  temp_position.z=z;
-	  temp_position.psi=teta;
-
-	std_msgs::Float64 j1;
-	std_msgs::Float64 j2;
-	std_msgs::Float64 j3;
-	std_msgs::Float64 right_fingre;
-	std_msgs::Float64 left_fingre;
-
-	InverseKinematics3R(temp_position, q_inv,dq_inv);
-		
-		j1.data=q_inv[0];
-		j2.data=q_inv[1];
-		j3.data=q_inv[2];
-		right_fingre.data=grip;
-		left_fingre.data=-grip;
-		j0_pub_.publish(j1);
-		j2_pub_.publish(j2);
-		j4_pub_.publish(j3);
-		j5_pub_.publish(left_fingre);
-		j6_pub_.publish(right_fingre);
+	Task target_position;
+	
+	target_position.x=x;
+	target_position.z=z;
+	target_position.psi=psi;
+	target_position.dx=dx;
+	target_position.dz=dz;
+	target_position.dpsi=dpsi;
+	
+	sensor_msgs::JointState joint_state_msg;
+	joint_state_msg.name.resize(6); 
+	joint_state_msg.position.resize(6); 
+	joint_state_msg.velocity.resize(6); 
+	  
+	InverseKinematics3R(target_position, q_inv,dq_inv);
+	
+	joint_state_msg.name[0]="arm_rotation1_joint";
+	joint_state_msg.name[1]="arm_shoulder1_joint";
+	joint_state_msg.name[2]="arm_shoulder2_joint";
+	joint_state_msg.name[3]="arm_rotation2_joint";
+	joint_state_msg.name[4]="arm_shoulder3_joint";
+	joint_state_msg.name[5]="arm_wrist_joint";
+	
+	joint_state_msg.position[0]=0;
+	joint_state_msg.position[1]=q_inv[0];
+	joint_state_msg.position[2]=q_inv[1];
+	joint_state_msg.position[3]=0;
+	joint_state_msg.position[4]=q_inv[2];
+	joint_state_msg.position[5]=0;
+	
+    joint_state_msg.velocity[0]=0;
+    joint_state_msg.velocity[1]=dq_inv[0];
+    joint_state_msg.velocity[2]=dq_inv[1];
+    joint_state_msg.velocity[3]=0;
+    joint_state_msg.velocity[4]=dq_inv[2];
+    joint_state_msg.velocity[5]=0;
+    
+    joint_state_pub.publish(joint_state_msg);
+    
 }
 
 
-
+void grip(double rate)
+{
+	
+	
+	
+}
 
 
 
@@ -152,23 +177,15 @@ void move_arm(double x,double z,double teta,double grip)
 
 int main(int argc, char **argv)
 {
-int i, j, N=300;
-double jj;
-float** angles;
-double th_time;
-double Vc;
-Task current_position, Temp;
- Task temp_position;
-  ros::init(argc, argv, "kuka_or");
 
+  ros::init(argc, argv, "h_manipulator");
   ros::NodeHandle n;
+  
+  float** angles;
 
+  
+  joint_state_pub = n.advertise<sensor_msgs::JointState>("/joint_commands", 10000);
 
-	j0_pub_  = n.advertise<std_msgs::Float64>("/kuka/kuka_1_controller/command", 10000);//joint 1
-	j2_pub_  = n.advertise<std_msgs::Float64>("/kuka/kuka_3_controller/command", 10000);//joint 2
-	j4_pub_  = n.advertise<std_msgs::Float64>("/kuka/kuka_5_controller/command", 10000);//joint 3
-	j5_pub_  = n.advertise<std_msgs::Float64>("/kuka/kuka_left_finger_controller/command", 10000); //left fingre
-	j6_pub_  = n.advertise<std_msgs::Float64>("/kuka/kuka_right_finger_controller/command", 10000);//right fingre
 	
 
   ros::Rate loop_rate(30);
@@ -182,7 +199,7 @@ Task current_position, Temp;
 while(ros::ok()) {
 
   
-		
+		move_arm(0,0.3,PI/2,0.1,0.1,0.1);
 		ros::spinOnce();
 	}
 

@@ -1,0 +1,25 @@
+right_controller:
+    controller:
+        package: dynamixel_controllers
+        module: joint_position_controller
+        type: JointPositionController
+    joint_name: right_joint
+    joint_speed: 2.0
+    motor:
+        id: 5
+        init: 512
+        min: 0
+        max: 4096
+
+left_controller:
+    controller:
+        package: dynamixel_controllers
+        module: joint_position_controller
+        type: JointPositionController
+    joint_name: left_joint
+    joint_speed: 2.0
+    motor:
+        id: 6
+        init: 512
+        min: 0
+        max: 4096
