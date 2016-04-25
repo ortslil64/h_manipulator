@@ -22,25 +22,25 @@ ros::Publisher left_gripper_pub;
 
 
 typedef struct Task {
-	float x;
-	float z;
-	float psi;
-	float dx;
-	float dz;
-	float dpsi;
+	double x;
+	double z;
+	double psi;
+	double dx;
+	double dz;
+	double dpsi;
 };
 /////// avishai's code//////
 // Links lengths
-const float L1 = 0.264; //420e-3; //Second and third links
-const float L2 = 0.258; //400e-3; //Fourth and fifth links
-const float L3 = 0.3; //?????235.9e-3; //Sixth link and gripper
+const double L1 = 0.264; //420e-3; //Second and third links
+const double L2 = 0.258; //400e-3; //Fourth and fifth links
+const double L3 = 0.3; //?????235.9e-3; //Sixth link and gripper
 
-void InverseKinematics3R(Task G, float* q, float* dq) {
+void InverseKinematics3R(Task G, double* q, double* dq) {
 	//Inverse kinematics function
-	float xt, zt, gamma, R;
-	float L1n, L2n, b = 0, cosb2, sinb2;
+	double xt, zt, gamma, R;
+	double L1n, L2n, b = 0, cosb2, sinb2;
 	int i, sigma;
-	const float a = 0.03;
+	const double a = 0.03;
 	
 	// Position
 	for (i=1; i<=4; i++) {
@@ -70,7 +70,7 @@ void InverseKinematics3R(Task G, float* q, float* dq) {
 	// ROS_INFO("q1=%lf  q2=%lf   q3=%lf   z=%lf",q[0],q[1],q[2],G.z);
 }
 
-float** TrajectoryGenerator(int N, float T, float xc, float z0, float vd) {
+double** TrajectoryGenerator(int N, double T, double xc, double z0, double a) {
 	// N - number of trajectory points
 	// T - duratiohight_pubn of motion
 	// xc - constant x coordinate to move along
@@ -79,22 +79,23 @@ float** TrajectoryGenerator(int N, float T, float xc, float z0, float vd) {
 	// motion along: z(t) = vd/(2T)*t^2 + z0
 
 	int i, j;
-	float dt = T/N, t = 0;
+	double dt = T/N, t = 0;
 	Task G;
-	float q[3];
-	float dq[3];
+	double q[3];
+	double dq[3];
 
 	// Allocate trajectory matrix
-	float** angles = (float**)malloc(N*sizeof(float*));
+	double** angles = (double**)malloc(N*sizeof(double*));
 	for (i=0; i<N; i++)
-		angles[i] = (float*)malloc(6*sizeof(float));
+		angles[i] = (double*)malloc(6*sizeof(double));
 
 	G.x = xc; G.dx = 0;
 	G.psi = PI/2; G.dpsi = 0;
 	for (i=0; i<N; i++) {
 		t += dt;
-		G.z = vd/(2*T)*t*t + z0;
-		G.dz = vd/T*t;
+		 G.z = 0.5*a*t*t + z0;
+		//if(t>0.32*T) G.z = 0.5*a*(0.32*T)*(0.32*T) + z0 -0.2;
+		G.dz = a*t;
 		InverseKinematics3R(G, q, dq);
 		for (j=0; j<3; j++) {
 			angles[i][j] = q[j];
@@ -104,7 +105,7 @@ float** TrajectoryGenerator(int N, float T, float xc, float z0, float vd) {
 	return angles;
 }
 
-float** TrajectoryGenerator_xyz(int N, float T, float xc, float z0, float vd) {
+double** TrajectoryGenerator_xyz(int N, double T, double xc, double z0, double vd) {
 	// N - number of trajectory points
 	// T - duratiohight_pubn of motion
 	// xc - constant x coordinate to move along
@@ -113,15 +114,15 @@ float** TrajectoryGenerator_xyz(int N, float T, float xc, float z0, float vd) {
 	// motion along: z(t) = vd/(2T)*t^2 + z0
 
 	int i, j;
-	float dt = T/N, t = 0;
+	double dt = T/N, t = 0;
 	Task G;
-	float q[3];
-	float dq[3];
+	double q[3];
+	double dq[3];
 
 	// Allocate trajectory matrix
-	float** angles = (float**)malloc(N*sizeof(float*));
+	double** angles = (double**)malloc(N*sizeof(double*));
 	for (i=0; i<N; i++)
-		angles[i] = (float*)malloc(2*sizeof(float));
+		angles[i] = (double*)malloc(2*sizeof(double));
 
 	G.x = xc; G.dx = 0;
 	G.psi = PI/2; G.dpsi = 0;
@@ -142,8 +143,8 @@ G.z = vd/(2*T)*t*t + z0;
 
 void move_arm(double x,double z,double psi,double dx,double dz,double dpsi)
 {
-	float q_inv[3];
-	float dq_inv[3];
+	double q_inv[3];
+	double dq_inv[3];
 	Task target_position;
 	
 	target_position.x=x;
@@ -244,38 +245,35 @@ int main(int argc, char **argv)
 
   ros::init(argc, argv, "h_manipulator");
   ros::NodeHandle n;
-  int i;
-  float N=65;
   
-  double dt = 0.05;
+  double N=20;
+  int i=0,j;
+  j=(int)N-3;
+  double dt = 0.01;
+  double K = 0; 
+  double T=dt*N;
+  double** angles;
+  double** angles_xyz;
   
-  float T=dt*N;
-  float** angles;
-  float** angles_xyz;
-  
-  joint_state_pub = n.advertise<sensor_msgs::JointState>("/joint_commands", 100);
-  right_gripper_pub = n.advertise<std_msgs::Float64>("/right_controller/command", 100);
-  left_gripper_pub = n.advertise<std_msgs::Float64>("/left_controller/command", 100);
+  joint_state_pub = n.advertise<sensor_msgs::JointState>("/joint_commands", 1000);
+  right_gripper_pub = n.advertise<std_msgs::Float64>("/right_controller/command", 1000);
+  left_gripper_pub = n.advertise<std_msgs::Float64>("/left_controller/command", 1000);
 
   ros::Rate loop_rate(150);
 	ros::Duration pause_loop(0.01);
 	ros::Duration pause_loop2(dt);
 
 //angles_xyz=TrajectoryGenerator_xyz((int)N, T, -0.5, 0,1);
-angles=TrajectoryGenerator((int)N, T, -0.4, 0.13,35	);
+angles=TrajectoryGenerator((int)N, T, -0.55, 0.1,15);
 
-angles[(int)N-1][3]=0;
-angles[(int)N-1][4]=0;
-angles[(int)N-1][5]=0;
+
 	
-
-
 
 for(i=0;i<500;i++)
 {
-	move_arm(-0.4,0.13,PI/2,0.3,0.3,0.2);
+	move_arm(-0.55,0.1,PI/2,0,0,0);
 	pause_loop.sleep();
-	grip(-0.05);
+	grip(-0.07);
 	
 }
 i=0;
@@ -284,15 +282,27 @@ i=0;
 while(ros::ok()) {
 for(i;i<N-1;i++)
 {
+if(i>16) grip(0.07);
 
-move_angles(angles[i][0],angles[i][1],angles[i][2],0,0,0);
-
-if(i<6) grip(-0.05);
-if(i>6	 && i<10) grip(0.02);
-if(i>10) grip(-0.05);
+move_angles(angles[i][0],angles[i][1],angles[i][2],K*angles[i][3],K*angles[i][4],K*angles[i][5]);
+ ROS_INFO("i: q1=%lf  q2=%lf   q3=%lf",angles[i][0],angles[i][1],angles[i][2]);
 pause_loop2.sleep();
+ros::spinOnce();
 }
-move_angles(angles[i][0],angles[i][1],angles[i][2],angles[i][3],angles[i][4],angles[i][5]);
+
+
+for(j;j>10;j--)
+{
+if(j<14) grip(-0.071);
+move_angles(angles[j][0],angles[j][1],angles[j][2],K*angles[j][3],K*angles[j][4],K*angles[j][5]);
+ ROS_INFO("j: q1=%lf  q2=%lf   q3=%lf",angles[j][0],angles[j][1],angles[j][2]);
+pause_loop2.sleep();
+ros::spinOnce();
+}
+
+
+
+//move_angles(angles[i][0],angles[i][1],angles[i][2],0,0,0);
 loop_rate.sleep();
 }		
 	
